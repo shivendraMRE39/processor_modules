@@ -1,0 +1,118 @@
+module pmp_entry #(
+    parameter PMP_ENTRIES = 4
+)(
+    input  logic [31:0] addr,
+
+    input  logic req_read,
+    input  logic req_write,
+    input  logic req_exec,
+
+    input  logic [1:0] priv_mode,   // 00=U, 01=S, 11=M
+
+    input  logic [7:0]  pmpcfg [PMP_ENTRIES],
+    input  logic [31:0] pmpaddr[PMP_ENTRIES],
+
+    output logic access_granted,
+    output logic access_fault
+);
+
+        logic match;
+        logic perm_ok;
+        logic hit;
+
+        logic [31:0] lower;
+        logic [31:0] upper;
+        logic [31:0] mask;
+
+        integer i;
+
+       always_comb begin
+
+    access_granted = 0;
+    access_fault   = 0;
+    hit            = 0;
+
+    // Machine mode bypass 
+    if(priv_mode == 2'b11) begin
+        access_granted = 1'b1;
+    end
+    else begin
+
+        for(i = 0; i < PMP_ENTRIES; i++) begin
+
+            if(!hit) begin
+
+                match = 0;
+
+                case(pmpcfg[i][4:3])
+
+                    // OFF
+                    2'b00: match = 0;
+
+                    // TOR
+                    2'b01: begin
+
+                        upper = pmpaddr[i];
+
+                        if(i == 0)
+                            lower = 0;
+                        else
+                            lower = pmpaddr[i-1];
+
+                        if(addr >= lower && addr < upper)
+                            match = 1;
+
+                    end
+
+                    // NA4
+                    2'b10: begin
+
+                        lower = pmpaddr[i];
+                        upper = pmpaddr[i] + 4;
+
+                        if(addr >= lower && addr < upper)
+                            match = 1;
+
+                    end
+
+                    // NAPOT
+                    2'b11: begin
+
+                        mask = ~(pmpaddr[i] ^ (pmpaddr[i] + 1));
+
+                        if((addr & mask) == (pmpaddr[i] & mask))
+                            match = 1;
+
+                    end
+
+                endcase
+
+
+                // Permission check
+                if(match) begin
+
+                    hit = 1;
+
+                    perm_ok =
+                        (req_read  && pmpcfg[i][0]) ||
+                        (req_write && pmpcfg[i][1]) ||
+                        (req_exec  && pmpcfg[i][2]);
+
+                    access_granted = perm_ok;
+                    access_fault   = ~perm_ok;
+
+                end
+            end
+
+        end
+
+        // If no entry matched → fault in U/S mode
+        if(!hit) begin
+            access_granted = 1'b0;
+            access_fault   = 1'b1;
+        end
+
+    end
+end
+
+endmodule
