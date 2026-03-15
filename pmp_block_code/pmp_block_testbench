@@ -1,0 +1,126 @@
+`timescale 1ns/1ps
+
+module pmp_entry_tb;
+
+parameter PMP_ENTRIES = 4;
+
+logic [31:0] addr;
+logic req_read;
+logic req_write;
+logic req_exec;
+logic [1:0] priv_mode;
+
+logic [7:0]  pmpcfg [PMP_ENTRIES];
+logic [31:0] pmpaddr[PMP_ENTRIES];
+
+logic access_granted;
+logic access_fault;
+
+pmp_entry #(.PMP_ENTRIES(PMP_ENTRIES)) dut (
+    .addr(addr),
+    .req_read(req_read),
+    .req_write(req_write),
+    .req_exec(req_exec),
+    .priv_mode(priv_mode),
+    .pmpcfg(pmpcfg),
+    .pmpaddr(pmpaddr),
+    .access_granted(access_granted),
+    .access_fault(access_fault)
+);
+
+initial begin
+
+// ----------------------
+// Initialize
+// ----------------------
+
+addr = 0;
+req_read = 0;
+req_write = 0;
+req_exec = 0;
+priv_mode = 0;
+
+for(int i=0;i<PMP_ENTRIES;i++) begin
+    pmpcfg[i] = 0;
+    pmpaddr[i] = 0;
+end;
+
+#10;
+
+
+// TEST1 Machine mode
+
+
+priv_mode = 2'b11;
+addr = 32'h1000;
+
+#10;
+
+// TEST2 NA4 read
+
+
+priv_mode = 2'b00;
+
+pmpcfg[0][4:3] = 2'b10;
+pmpcfg[0][0]   = 1;
+
+pmpaddr[0] = 32'h1000;
+
+addr = 32'h1000;
+req_read = 1;
+
+#10;
+
+
+// TEST3 NA4 write fault
+
+
+req_read = 0;
+req_write = 1;
+
+#10;
+
+
+// TEST4 TOR
+
+
+req_write = 0;
+req_read = 1;
+
+pmpcfg[0] = 0;
+pmpcfg[1] = 0;
+
+pmpaddr[0] = 32'h1000;
+pmpaddr[1] = 32'h2000;
+
+pmpcfg[1][4:3] = 2'b01;
+pmpcfg[1][0]   = 1;
+
+addr = 32'h1500;
+
+#10;
+
+
+// TEST5 NAPOT
+
+
+for(int i=0;i<PMP_ENTRIES;i++) begin
+    pmpcfg[i] = 0;
+    pmpaddr[i] = 0;
+end
+
+pmpcfg[0][4:3] = 2'b11;
+pmpcfg[0][0]   = 1;
+
+pmpaddr[0] = 32'h3003;
+
+addr = 32'h3002;
+req_read = 1;
+
+#10;
+
+$finish;
+
+end
+
+endmodule
